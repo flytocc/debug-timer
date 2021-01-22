@@ -54,6 +54,10 @@ class _DebugTimer(object):
            code3
            debug_timer.timer3_toc()
 
+           @debug_timer.timer("timer4")
+           def func(*args, **kwargs):
+               code4
+
         3. debug_timer.log()
 
     TODO: multithreading support
@@ -67,7 +71,7 @@ class _DebugTimer(object):
     def __init__(self, num_warmup=0):
         super(_DebugTimer, self).__init__()
         self.num_warmup = num_warmup
-        self.timers = OrderedDict()
+        self.timers = defaultdict(Timer)
         self.context_stacks = []
         self.calls = 0
 
@@ -102,34 +106,35 @@ class _DebugTimer(object):
         # if torch.cuda.is_available():
         #     torch.cuda.synchronize()
 
-    def add_timer(self, name):
-        if name in self.timers:
-            raise ValueError(
-                "Trying to add a existed Timer which is named '{}'!".format(name)
-            )
-        timer = Timer()
-        self.timers[name] = timer
-        return timer
-
     def reset_timer(self):
-        for _, timer in self.timers:
+        for timer in self.timers.values():
             timer.reset()
 
     def tic(self, name):
-        timer = self.timers.get(name, None)
-        if not timer:
-            timer = self.add_timer(name)
+        timer = self.timers[name]
         timer.tic()
+        return timer
 
     def toc(self, name):
         timer = self.timers.get(name, None)
-        if not timer:
+        if timer is None:
             raise ValueError(
                 "Trying to toc a non-existent Timer which is named '{}'!".format(name)
             )
-        if not self.num_warmup > self.calls:
+        if self.calls >= self.num_warmup:
             self.wait()
             return timer.toc(average=False)
+
+    def timer(self, name):
+        def args_wrapper(func):
+            def func_wrapper(*args, **kwargs):
+                timer = self.timers[name]
+                timer.tic()
+                ret = func(*args, **kwargs)
+                timer.toc()
+                return ret
+            return func_wrapper
+        return args_wrapper
 
     def log(self, logperiod=10):
         """
@@ -138,7 +143,7 @@ class _DebugTimer(object):
         """
         self.calls += 1
         if self.calls % logperiod == 0 and self.timers:
-            lines = ['']
+            lines = [""]
             for name, timer in self.timers.items():
                 avg_time = timer.average_time
                 suffix = "s"
