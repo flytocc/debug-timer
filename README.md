@@ -17,6 +17,10 @@ Usage:
    code3
    debug_timer.timer3_toc()
 
+   @debug_timer.timer("timer4")
+   def func(*args, **kwargs):
+       code4
+
 3. debug_timer.log()
 
 TODO: multithreading support
