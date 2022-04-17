@@ -1,7 +1,5 @@
 import time
-from collections import OrderedDict
-
-# import torch
+from collections import defaultdict
 
 
 class Timer(object):
@@ -39,7 +37,6 @@ class Timer(object):
 class _DebugTimer(object):
     """
     Track vital debug statistics.
-
     Usage:
         1. from timer import debug_timer
 
@@ -54,18 +51,18 @@ class _DebugTimer(object):
            code3
            debug_timer.timer3_toc()
 
-           @debug_timer.timer("timer4")
+           @debug_timer("timer4")
            def func(*args, **kwargs):
                code4
 
         3. debug_timer.log()
-
-    TODO: multithreading support
     """
+
     __TIMER__ = None
+
     def __new__(cls, *args, **kwargs):
         if cls.__TIMER__ is None:
-            cls.__TIMER__ = super().__new__(cls)
+            cls.__TIMER__ = super(_DebugTimer, cls).__new__(cls)
         return cls.__TIMER__
 
     def __init__(self, num_warmup=0):
@@ -82,12 +79,18 @@ class _DebugTimer(object):
             return lambda : self.tic(name[:-4])
         elif name.endswith("_toc"):
             return lambda : self.toc(name[:-4])
-        else:
-            raise AttributeError(name)
+        raise AttributeError(name)
 
-    def __call__(self, name):
-        self.context_stacks.append(name)
-        return self
+    def __call__(self, name_or_func):
+        if isinstance(name_or_func, str):
+            self.context_stacks.append(name_or_func)
+            return self
+
+        name = self.context_stacks.pop(-1)
+        def func_wrapper(*args, **kwargs):
+            with self(name):
+                return name_or_func(*args, **kwargs)
+        return func_wrapper
 
     def __enter__(self):
         name = self.context_stacks[-1]
@@ -97,14 +100,8 @@ class _DebugTimer(object):
     def __exit__(self, exc_type, exc_value, traceback):
         name = self.context_stacks.pop(-1)
         self.toc(name)
-        if exc_type:
-            print(exc_type, exc_value)
-            print(traceback)
-
-    def wait(self):
-        pass
-        # if torch.cuda.is_available():
-        #     torch.cuda.synchronize()
+        if exc_type is not None:
+            raise exc_value
 
     def reset_timer(self):
         for timer in self.timers.values():
@@ -118,23 +115,9 @@ class _DebugTimer(object):
     def toc(self, name):
         timer = self.timers.get(name, None)
         if timer is None:
-            raise ValueError(
-                "Trying to toc a non-existent Timer which is named '{}'!".format(name)
-            )
+            raise ValueError(f"Trying to toc a non-existent Timer which is named '{name}'!")
         if self.calls >= self.num_warmup:
-            self.wait()
             return timer.toc(average=False)
-
-    def timer(self, name):
-        def args_wrapper(func):
-            def func_wrapper(*args, **kwargs):
-                timer = self.timers[name]
-                timer.tic()
-                ret = func(*args, **kwargs)
-                timer.toc()
-                return ret
-            return func_wrapper
-        return args_wrapper
 
     def log(self, logperiod=10):
         """
@@ -159,10 +142,12 @@ debug_timer = _DebugTimer()
 
 
 if __name__ == "__main__":
+    @debug_timer('timer0')
     def code():
         s = 0
         for i in range(100000):
             s += i
+        return True
 
     for _ in range(1000):
         with debug_timer('timer1'):
@@ -175,5 +160,5 @@ if __name__ == "__main__":
         debug_timer.timer3_tic()
         code()
         debug_timer.timer3_toc()
-        
+
         debug_timer.log()
