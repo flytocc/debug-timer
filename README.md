@@ -1,9 +1,11 @@
 # debug-timer
+
 A Timer for Debug. 
 
 Track vital debug statistics.
 
 Usage:
+```
 1. from timer import debug_timer
 
 2. with debug_timer("timer1"):
@@ -17,10 +19,9 @@ Usage:
    code3
    debug_timer.timer3_toc()
 
-   @debug_timer.timer("timer4")
+   @debug_timer("timer4")
    def func(*args, **kwargs):
        code4
 
 3. debug_timer.log()
-
-TODO: multithreading support
+```
